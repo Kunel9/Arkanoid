@@ -7,6 +7,7 @@
 #include <cmath>
 #include <random>
 #include <ctime>
+#pragma comment(lib, "msimg32.lib")
 using namespace std;
 
 
@@ -370,14 +371,14 @@ void DrawBitmap(HDC hdcDest, int x, int y, int w, int h, HBITMAP hBmp, bool tran
     BITMAP bmp;
     GetObject(hBmp, sizeof(BITMAP), &bmp);
     
-    //if (transparent) // по какой-то причине не работает прозрачность
-    //{
-    //    TransparentBlt(hdcDest, x, y, w, h, hMemDC, 0, 0, w, h, RGB(0, 0, 0)); // черные пиксели в прозрачные
-    //}
-    //else
-    //{
-        StretchBlt(hdcDest, x, y, w, h, hMemDC, 0, 0, bmp.bmWidth, bmp.bmHeight, SRCCOPY);
-    //}
+    if (transparent)
+    {
+        TransparentBlt(hdcDest, x, y, w, h, hMemDC, 0, 0, w, h, RGB(0, 0, 0)); // черные пиксели в прозрачные
+    }
+    else
+    {
+      StretchBlt(hdcDest, x, y, w, h, hMemDC, 0, 0, bmp.bmWidth, bmp.bmHeight, SRCCOPY);
+    }
     
     SelectObject(hMemDC, hOldBmp);
     DeleteDC(hMemDC);
@@ -507,8 +508,8 @@ int WINAPI wWinMain(HINSTANCE hI, HINSTANCE hPrevInstance, PWSTR pCmdLine, int n
     int screenHeight = GetSystemMetrics(SM_CYSCREEN); // получение размеров экрана
     
     // Задаем размеры окна
-    int windowWidth = 1024 + 17; // размер окна
-    int windowHeight = 832 + 6; // размер окна
+    int windowWidth = 1024 + 16; // размер окна
+    int windowHeight = 768 + 38; // размер окна
     
     // вычисление координат для центрирования окна
     int windowX = (screenWidth - windowWidth) / 2;
