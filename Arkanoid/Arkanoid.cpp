@@ -34,7 +34,7 @@ struct Game // структура игры
         float x, y, height, width, speed, dx, dy;
     };
 
-    struct Block // Структура блока
+    struct Block // структура блока
     {
         HBITMAP hBitmaps[3] = {
         (HBITMAP)LoadImageW(NULL, L"block_yellow.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE),
@@ -58,6 +58,8 @@ struct Game // структура игры
             if (size < max_size)
             {
                 size++;
+                width = section_width * size;
+                x = x - section_width / 2;
             }
         }
 
@@ -66,36 +68,97 @@ struct Game // структура игры
             if (size > min_size)
             {
                 size--;
+                width = section_width * size;
+                x = x + section_width / 2;
             }
         }
     } platform;
 
-    vector<Ball> balls; // вектор для отслеживания всех мячей в игре
-    vector<vector<Block>> blocks; // двумерный вектор для отслеживания всех блоков в игре
+    enum BonusTypes // перечисление типов бонусов
+    {
+        bonus_add_ball,
+        bonus_size_up,
+        bonus_size_down
+    };
+
+    struct Bonus // структура бонуса
+    {
+        HBITMAP hBitmap;
+        BonusTypes type;
+        float x, y, height, width, speed;
+        bool active;
+
+        Bonus()
+        {
+            active = true;
+
+            if (rand() % 100 < 50) // случайное определение типа создаваемого бонуса
+            {   
+                BonusTypes positive_bonuses[] = { bonus_add_ball , bonus_size_up }; // позитивные бонусы
+                type = positive_bonuses[rand() % size(positive_bonuses)];
+            }
+            else 
+            {              
+                BonusTypes negative_bonuses[] = { bonus_size_down }; // негативные бонусы
+                type = negative_bonuses[rand() % size(negative_bonuses)];
+            }
+            
+            // загрузка изображения бонуса
+            if (type == bonus_add_ball)
+            {
+                hBitmap = (HBITMAP)LoadImageW(NULL, L"bonus_add_ball.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+            }
+            else if (type == bonus_size_up)
+            {
+                hBitmap = (HBITMAP)LoadImageW(NULL, L"bonus_size_up.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+            }   
+            else if (type == bonus_size_down)
+            {
+                hBitmap = (HBITMAP)LoadImageW(NULL, L"bonus_size_down.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+            }
+        }
+
+        void activate(Game& game_link) // процедура активации бонуса
+        {   
+            if (active)
+            {
+                active = false;
+
+                if (type == bonus_add_ball)
+                {     
+                    game_link.AddBall();
+                }
+                else if (type == bonus_size_up)
+                {
+                    game_link.platform.SizeUp();
+                }
+                else if (type == bonus_size_down)
+                {
+                    game_link.platform.SizeDown();
+                }
+            }
+        }
+    };
+
+    vector<Ball> balls; // вектор для отслеживания мячей 
+    vector<vector<Block>> blocks; // двумерный вектор для отслеживания блоков
+    vector<Bonus> bonuses; // вектор для отслеживания бонусов
     
     void InitGame() // процедура инициализации игры
     {
         // инициализация платформы
         platform.size = 5;
         platform.min_size = 1;
-        platform.max_size = 9;  
-        platform.section_width = 16;
-        platform.height = 16;
+        platform.max_size = 32;  
+        platform.section_width = 32;
+        platform.height = 32;
         platform.width = platform.section_width * platform.size;
         platform.x = window.width / 2 - platform.width / 2;
         platform.y = window.height - platform.height;
-        platform.speed = 10;
+        platform.speed = 16;
 
         // инициализация стартового мяча
-        Ball new_ball;
-        new_ball.height = 16;
-        new_ball.width = 16;
-        new_ball.x = platform.x + platform.width / 2 - new_ball.width / 2;
-        new_ball.y = platform.y - new_ball.height;
-        new_ball.speed = 10;
-        new_ball.dy = 0.45; 
-        new_ball.dx = 0.45;
-        balls.push_back(new_ball);      
+        AddBall();    
 
         // инициализация блоков
         for (int row = 1; row < 7; row++) 
@@ -104,8 +167,8 @@ struct Game // структура игры
             for (int col = 1; col < 15; col++) 
             {
                 Block new_block;
-                new_block.width = 32;
-                new_block.height = 32;
+                new_block.width = 64;
+                new_block.height = 64;
                 new_block.endurance = 1 + rand() % 3;
                 new_block.x = col * new_block.width;
                 new_block.y = row * new_block.height;
@@ -123,7 +186,7 @@ struct Game // структура игры
         Point(float x_pos, float y_pos) : x(x_pos), y(y_pos){}
     };
 
-    bool check_collision(pair <Point, Point>& points_a, pair <Point, Point>& points_b) // функция проверки столкновения двух коллизий
+    bool CheckCollision(pair <Point, Point>& points_a, pair <Point, Point>& points_b) // функция проверки столкновения двух коллизий
     {
         bool intersection_x = false;
         bool intersection_y = false;
@@ -143,7 +206,30 @@ struct Game // структура игры
         {
             return false;
         }
+    }
+    
+    void CreateBonus(float x, float y) // процедура создания бонуса
+    {
+        Bonus new_bonus;
+        new_bonus.width = 32;
+        new_bonus.height = 32;
+        new_bonus.x = x - new_bonus.width / 2;
+        new_bonus.y = y - new_bonus.height / 2;
+        new_bonus.speed = 6;
+        bonuses.push_back(new_bonus);
+    }
 
+    void AddBall() // процедура добавления мяча
+    {
+        Ball new_ball;
+        new_ball.height = 32;
+        new_ball.width = 32;
+        new_ball.x = platform.x + platform.width / 2 - new_ball.width / 2;
+        new_ball.y = platform.y - new_ball.height;
+        new_ball.speed = 16;
+        new_ball.dy = (20 + rand() % 60) / 100.;
+        new_ball.dx = ((rand() % 2 == 1) ? 1 : -1) * (1 - new_ball.dy);
+        balls.push_back(new_ball);
     }
 
     void ProcessInput() // процедура обработки ввода
@@ -169,16 +255,16 @@ struct Game // структура игры
 
         pair<Point, Point> platform_points = { Point(platform.x, platform.y), Point(platform.x + platform.width, platform.y + platform.height) }; // точки коллизии платформы
 
-        for (auto& ball : game.balls)
+        for (auto& ball : balls) // обработка мячей
         {
             ball.x -= ball.dx * ball.speed;
             ball.y -= ball.dy * ball.speed;
 
-            pair<Point, Point> ball_points = { Point(ball.x , ball.y), Point(ball.x + ball.width, ball.y + ball.height) };
+            pair<Point, Point> ball_points = { Point(ball.x , ball.y), Point(ball.x + ball.width, ball.y + ball.height) }; // точки коллизии мяча
 
-            if (check_collision(platform_points, ball_points) && ball.dy < 0) // отскок мяча от платформы
-            {   
-                ball.dy *= -1; 
+            if (CheckCollision(platform_points, ball_points) && ball.dy < 0) // отскок мяча от платформы
+            {
+                ball.dy *= -1;
             }
 
             if (ball.x <= 0 || ball.x + ball.width >= window.width) // отскок мяча от краев экрана
@@ -198,17 +284,16 @@ struct Game // структура игры
                 for (int col = 0; col < blocks[row].size(); col++)
                 {
                     if (blocks[row][col].endurance <= 0) continue;
-                    
-                    pair<Point, Point> block_points = { Point(blocks[row][col].x, blocks[row][col].y), Point(blocks[row][col].x + blocks[row][col].width, blocks[row][col].y + blocks[row][col].height) };
-                    if (check_collision(block_points, ball_points))
+
+                    pair<Point, Point> block_points = { Point(blocks[row][col].x, blocks[row][col].y), Point(blocks[row][col].x + blocks[row][col].width, blocks[row][col].y + blocks[row][col].height) }; // точки коллизии блока
+                    if (CheckCollision(block_points, ball_points))
                     {
-                        Point ball_center{ ball.x + ball.width / 2, ball.y + ball.height / 2 };
-                        Point block_center{ blocks[row][col].x + blocks[row][col].width / 2, blocks[row][col].y + blocks[row][col].height / 2 };
-                    
+                        Point ball_center{ ball.x + ball.width / 2, ball.y + ball.height / 2 }; // центр мяча
+                        Point block_center{ blocks[row][col].x + blocks[row][col].width / 2, blocks[row][col].y + blocks[row][col].height / 2 }; // центр блока
+
                         if (abs(ball_center.x - block_center.x) > abs(ball_center.y - block_center.y))
                         {
                             ball.dx *= -1;
-
                         }
                         else if (abs(ball_center.x - block_center.x) < abs(ball_center.y - block_center.y))
                         {
@@ -219,20 +304,62 @@ struct Game // структура игры
                             ball.dx *= -1;
                             ball.dy *= -1;
                         }
-                        
+
                         blocks[row][col].endurance--;
+
+                        if (blocks[row][col].endurance <= 0) // создание бонуса при разрушении блока
+                        {
+                            if (rand() % 100 < 50) CreateBonus(block_center.x, block_center.y);
+                        }
 
                         collision_processed = true; // фиксация столкновения в текущем кадре
 
-                        break; //выход из цикла обработки столкновения (по колонкам)
+                        break; // выход из цикла обработки столкновения (по колонкам)
                     }
                 }
 
                 if (collision_processed) break; // если было зафиксировано столкновения в текущем кадре - выход из цикла обработки столкновения (по строкам);
             }
         }
-    }
 
+        for (auto& bonus : bonuses) // обработка бонусов
+        {
+            bonus.y += bonus.speed;
+
+            pair<Point, Point> bonus_points = { Point(bonus.x, bonus.y), Point(bonus.x + bonus.width, bonus.y + bonus.height) }; // точки коллизии бонуса
+
+            if (CheckCollision(platform_points, bonus_points))
+            {
+                bonus.activate(game);
+            }
+        }
+
+        // удаление лишних бонусов
+        for (int i = 0; i < bonuses.size(); )
+        {
+            if (bonuses[i].y > window.height)
+            {
+                bonuses.erase(bonuses.begin() + i);
+            }
+            else
+            {
+                ++i;
+            }
+        }
+        
+        // удаление лишних мячей
+        for (int i = 0; i < balls.size(); )
+        {
+            if (balls[i].y > window.height)
+            {
+                balls.erase(balls.begin() + i);
+            }
+            else
+            {
+                ++i;
+            }
+        }
+    }
 } game;
 
 void DrawBitmap(HDC hdcDest, int x, int y, int w, int h, HBITMAP hBmp, bool transparent) // процедура отрисовки объекта
@@ -243,7 +370,7 @@ void DrawBitmap(HDC hdcDest, int x, int y, int w, int h, HBITMAP hBmp, bool tran
     BITMAP bmp;
     GetObject(hBmp, sizeof(BITMAP), &bmp);
     
-    //if (transparent) //По какой-то причине не работает прозрачность
+    //if (transparent) // по какой-то причине не работает прозрачность
     //{
     //    TransparentBlt(hdcDest, x, y, w, h, hMemDC, 0, 0, w, h, RGB(0, 0, 0)); // черные пиксели в прозрачные
     //}
@@ -258,12 +385,6 @@ void DrawBitmap(HDC hdcDest, int x, int y, int w, int h, HBITMAP hBmp, bool tran
 
 void ShowObjects(HDC hMemDC) // процедура отрисовки всех объектов игры
 {
-    // мячи
-    for (auto& ball : game.balls)
-    {
-        DrawBitmap(hMemDC, ball.x, ball.y, ball.width, ball.height, ball.hBitmap,true);
-    }
-
     // блоки
     for (int row = 0; row < game.blocks.size(); row++) 
     {
@@ -274,6 +395,18 @@ void ShowObjects(HDC hMemDC) // процедура отрисовки всех объектов игры
                 DrawBitmap(hMemDC, game.blocks[row][col].x, game.blocks[row][col].y, game.blocks[row][col].width, game.blocks[row][col].height, game.blocks[row][col].hBitmaps[game.blocks[row][col].endurance - 1], false);
             }
         }
+    }
+
+    // бонусы
+    for (auto& bonus : game.bonuses)
+    {
+        if (bonus.active) DrawBitmap(hMemDC, bonus.x, bonus.y, bonus.width, bonus.height, bonus.hBitmap, false);
+    }
+
+    // мячи
+    for (auto& ball : game.balls)
+    {
+        DrawBitmap(hMemDC, ball.x, ball.y, ball.width, ball.height, ball.hBitmap, true);
     }
 
     // платформа
@@ -370,17 +503,29 @@ int WINAPI wWinMain(HINSTANCE hI, HINSTANCE hPrevInstance, PWSTR pCmdLine, int n
 
     RegisterClass(&wc);
 
+    int screenWidth = GetSystemMetrics(SM_CXSCREEN); // получение размеров экрана
+    int screenHeight = GetSystemMetrics(SM_CYSCREEN); // получение размеров экрана
+    
+    // Задаем размеры окна
+    int windowWidth = 1024 + 17; // размер окна
+    int windowHeight = 832 + 6; // размер окна
+    
+    // вычисление координат для центрирования окна
+    int windowX = (screenWidth - windowWidth) / 2;
+    int windowY = (screenHeight - windowHeight) / 2;
+    
     window.hWnd = CreateWindowEx(
         0,
         CLASS_NAME,
         L"Arkanoid",
-        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX, // в окне, без возможности редактирования размера
-        CW_USEDEFAULT, CW_USEDEFAULT, 529, 422, // размер окна
+        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
+        windowX, windowY,           // Позиция окна (центр экрана)
+        windowWidth, windowHeight,  // Размеры окна
         NULL,
         NULL,
         hI,
         NULL
-    );
+    );  
 
     if (window.hWnd == NULL) return 0;
 
