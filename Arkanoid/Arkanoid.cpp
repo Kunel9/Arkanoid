@@ -69,6 +69,8 @@ struct Game // структура игры
     struct Block // структура блока
     {
         HBITMAP hBitmaps[3] = { nullptr };
+        float x, y, height, width;
+        int endurance;
 
         Block()
         {
@@ -76,9 +78,7 @@ struct Game // структура игры
             hBitmaps[1] = LoadBmp(L"block_orange.bmp");
             hBitmaps[2] = LoadBmp(L"block_red.bmp");
         }
-
-        float x, y, height, width;
-        int endurance;
+       
     };
 
     struct Platform // структура платформы
@@ -205,7 +205,6 @@ struct Game // структура игры
     {
         hBitmap_defeat = LoadBmp(L"defeat.bmp");
         hBitmap_win = LoadBmp(L"win.bmp");
-        status = GameStatuses::wait;
     }
 
     void InitGame() // процедура инициализации игры
@@ -240,6 +239,8 @@ struct Game // структура игры
             }
             blocks.push_back(blocks_row);
         }
+
+        status = GameStatuses::wait;
     }
 
     bool CheckCollision(pair <Point, Point>& points_a, pair <Point, Point>& points_b) // функци€ проверки столкновени€ двух коллизий
@@ -291,6 +292,28 @@ struct Game // структура игры
         balls.push_back(new_ball);
     }
 
+    void RestartGame()
+    {
+        game.balls.clear();
+
+        for (int row = 0; row < blocks.size(); row++)
+        {
+            for (int col = 0; col < blocks[row].size(); col++)
+            {
+                for (int i = 0; i < size(game.blocks[row][col].hBitmaps); i++)
+                {
+                    if (game.blocks[row][col].hBitmaps[i]) DeleteObject(game.blocks[row][col].hBitmaps[i]);
+                }
+            }
+        }
+
+        game.blocks.clear();
+
+        game.bonuses.clear();
+
+        InitGame();
+    }
+
     void ProcessInput() // процедура обработки ввода
     {
         if (GetAsyncKeyState(VK_LEFT))
@@ -305,6 +328,16 @@ struct Game // структура игры
             platform.x += platform.speed;
 
             if (platform.x > window.width - platform.width) platform.x = window.width - platform.width;
+        }
+
+        if (GetAsyncKeyState(VK_SPACE) && status == GameStatuses::wait)
+        {
+            status = GameStatuses::process;
+        }
+
+        if (GetAsyncKeyState('R') && (status == GameStatuses::defeat || status == GameStatuses::win))
+        {
+            RestartGame();
         }
     }
 
@@ -358,27 +391,34 @@ struct Game // структура игры
     {
         for (auto& ball : balls)
         {
-            ball.x -= ball.dx * ball.speed;
-            ball.y -= ball.dy * ball.speed;
-
-            pair<Point, Point> ball_points = { Point(ball.x , ball.y), Point(ball.x + ball.width, ball.y + ball.height) }; // точки коллизии м€ча
-
-            if (CheckCollision(platform_points, ball_points) && ball.dy < 0) // отскок м€ча от платформы
+            if (status == GameStatuses::wait)
             {
-                ball.dy *= -1;
+                ball.x = platform.x + platform.width / 2 - ball.width / 2;
             }
-
-            if (ball.x <= 0 || ball.x + ball.width >= window.width) // отскок м€ча от краев экрана
+            else
             {
-                ball.dx *= -1;
-            };
+                ball.x -= ball.dx * ball.speed;
+                ball.y -= ball.dy * ball.speed;
 
-            if (ball.y <= 0) // отскок м€ча от потолка
-            {
-                ball.dy *= -1;
-            };
+                pair<Point, Point> ball_points = { Point(ball.x , ball.y), Point(ball.x + ball.width, ball.y + ball.height) }; // точки коллизии м€ча
 
-            ProcessBlocks(ball, ball_points);
+                if (CheckCollision(platform_points, ball_points) && ball.dy < 0) // отскок м€ча от платформы
+                {
+                    ball.dy *= -1;
+                }
+
+                if (ball.x <= 0 || ball.x + ball.width >= window.width) // отскок м€ча от краев экрана
+                {
+                    ball.dx *= -1;
+                };
+
+                if (ball.y <= 0) // отскок м€ча от потолка
+                {
+                    ball.dy *= -1;
+                };
+
+                ProcessBlocks(ball, ball_points);
+            }
         }
     }
 
