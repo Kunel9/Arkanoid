@@ -12,22 +12,34 @@
 #pragma comment(lib, "winmm.lib")
 using namespace std;
 
-struct Window // структура окна
+HBITMAP LoadBmp(LPCWSTR bmp_name)
 {
-    HBITMAP hBitmap = (HBITMAP)LoadImageW(NULL, L"background.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE); // загрузка изображения в HBITMAP;
+    return (HBITMAP)LoadImageW(NULL, bmp_name, IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+}
+
+struct Window
+{
+    HBITMAP hBitmap;
     HWND hWnd;
     float width, height;
+
+    Window()
+    {
+        hBitmap = LoadBmp(L"background.bmp");
+    }
+
 } window;
 
-struct Point // структура точки
+struct Point
 {
     float x;
     float y;
 
+    Point(): x(0.0f), y(0.0f) {}
     Point(float x_pos, float y_pos) : x(x_pos), y(y_pos) {}
 };
 
-void InitWindow() // процедура инициализации окна
+void InitWindow() 
 {
     RECT r;
     GetClientRect(window.hWnd, &r);
@@ -35,14 +47,14 @@ void InitWindow() // процедура инициализации окна
     window.height = r.bottom - r.top;
 }
 
-enum class BonusTypes // перечисление типов бонусов
+enum class BonusTypes
 {
     add_ball,
     size_up,
     size_down
 };
 
-enum class GameStatuses // перечисление типов бонусов
+enum class GameStatuses
 {
     wait,
     process,
@@ -50,22 +62,18 @@ enum class GameStatuses // перечисление типов бонусов
     win
 };
 
-HBITMAP LoadBmp(LPCWSTR bmp_name)
-{
-    return (HBITMAP)LoadImageW(NULL, bmp_name, IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
-}
-
 void ProcessSound(LPCWSTR wav_name)
 {
     PlaySound(wav_name, NULL, SND_FILENAME | SND_ASYNC);
 }
 
-struct Game // структура игры
+struct Game
 {
-    struct Ball // структура мяча
+    struct Ball
     {
         HBITMAP hBitmap = nullptr;
         float x, y, height, width, speed, dx, dy;
+        Point trace_points[32];
 
         Ball()
         {
@@ -73,7 +81,7 @@ struct Game // структура игры
         }
     };
 
-    struct Block // структура блока
+    struct Block
     {
         HBITMAP hBitmaps[3] = { nullptr };
         float x, y, height, width;
@@ -88,7 +96,7 @@ struct Game // структура игры
        
     };
 
-    struct Platform // структура платформы
+    struct Platform
     {
         HBITMAP hBitmap_begin = nullptr;
         HBITMAP hBitmap_middle = nullptr;
@@ -124,7 +132,7 @@ struct Game // структура игры
         }
     } platform;
 
-    struct Bonus // структура бонуса
+    struct Bonus
     {
         HBITMAP hBitmap = nullptr;
         BonusTypes type;
@@ -135,15 +143,15 @@ struct Game // структура игры
         {
             active = true;
 
-            if (rand() % 100 < 50) // случайное определение типа создаваемого бонуса
+            if (rand() % 100 < 50) // Random determination of bonus type
             {
-                BonusTypes positive_bonuses[] = { BonusTypes::add_ball , BonusTypes::size_up }; // позитивные бонусы
+                BonusTypes positive_bonuses[] = { BonusTypes::add_ball , BonusTypes::size_up }; 
                 positive = true;
                 type = positive_bonuses[rand() % size(positive_bonuses)];
             }
             else
             {
-                BonusTypes negative_bonuses[] = { BonusTypes::size_down }; // негативные бонусы
+                BonusTypes negative_bonuses[] = { BonusTypes::size_down }; 
                 positive = false;
                 type = negative_bonuses[rand() % size(negative_bonuses)];
             }
@@ -173,7 +181,7 @@ struct Game // структура игры
             hBitmap = LoadBmp(name_bmp);
         }
 
-        void activate(Game& game_link) // процедура активации бонуса
+        void activate(Game& game_link) // Activate bonus effect
         {
             if (active)
             {
@@ -209,10 +217,11 @@ struct Game // структура игры
 
     HBITMAP hBitmap_defeat = nullptr;
     HBITMAP hBitmap_win = nullptr;
-    vector<Ball> balls; // вектор для отслеживания мячей 
-    vector<vector<Block>> blocks; // двумерный вектор для отслеживания блоков
-    vector<Bonus> bonuses; // вектор для отслеживания бонусов
-    GameStatuses status;
+    vector<Ball> balls; // Vector for balls
+    vector<vector<Block>> blocks; // Two-dimensional array for blocks
+    vector<Bonus> bonuses; // Vector for bonuses
+    GameStatuses status; // Current game status
+    float gameplay_speed = 20;
 
     Game()
     {
@@ -240,7 +249,6 @@ struct Game // структура игры
             }
             case GameStatuses::process:
             {
-                ProcessSound(L"knock.wav");
                 break;
             }
             case GameStatuses::wait:
@@ -254,9 +262,11 @@ struct Game // структура игры
         }
     }
 
-    void InitGame() // процедура инициализации игры
+    void InitGame() 
     {
-        // инициализация платформы
+        gameplay_speed = 20;
+
+        // Platform initialization
         platform.size = 5;
         platform.min_size = 1;
         platform.max_size = 32;
@@ -265,12 +275,12 @@ struct Game // структура игры
         platform.width = platform.section_width * platform.size;
         platform.x = window.width / 2 - platform.width / 2;
         platform.y = window.height - platform.height;
-        platform.speed = 16;
+        platform.speed = gameplay_speed;
 
-        // инициализация стартового мяча
+        // Start ball initialization
         AddBall();
 
-        // инициализация блоков
+        // Create blocks
         for (int row = 1; row < 7; row++)
         {
             vector<Block> blocks_row;
@@ -286,11 +296,12 @@ struct Game // структура игры
             }
             blocks.push_back(blocks_row);
         }
-
+        
         SetGameStatus(GameStatuses::wait);
     }
 
-    bool CheckCollision(pair <Point, Point>& points_a, pair <Point, Point>& points_b) // функция проверки столкновения двух коллизий
+    // Checking collision between two objects
+    bool CheckCollision(pair <Point, Point>& points_a, pair <Point, Point>& points_b) 
     {
         bool intersection_x = false;
         bool intersection_y = false;
@@ -315,55 +326,72 @@ struct Game // структура игры
         }
     }
 
-    void CreateBonus(float x, float y) // процедура создания бонуса
+    void CreateBonus(float x, float y)
     {
         Bonus new_bonus;
         new_bonus.width = 32;
         new_bonus.height = 32;
         new_bonus.x = x - new_bonus.width / 2;
         new_bonus.y = y - new_bonus.height / 2;
-        new_bonus.speed = 6;
+        new_bonus.speed = gameplay_speed / 3;
         bonuses.push_back(new_bonus);
     }
 
-    void AddBall() // процедура добавления мяча
+    void AddBall() // Create new ball
     {
         Ball new_ball;
         new_ball.height = 32;
         new_ball.width = 32;
         new_ball.x = platform.x + platform.width / 2 - new_ball.width / 2;
         new_ball.y = platform.y - new_ball.height;
-        new_ball.speed = 16;
+        new_ball.speed = gameplay_speed;
         new_ball.dy = (20 + rand() % 60) / 100.;
         new_ball.dx = ((rand() % 2 == 1) ? 1 : -1) * (1 - new_ball.dy);
+
+        for (int i = 0; i < size(new_ball.trace_points); i++)
+        {
+            new_ball.trace_points[i].x = new_ball.x + new_ball.width / 2;
+            new_ball.trace_points[i].y = new_ball.y + new_ball.height / 2;
+        }
+
         balls.push_back(new_ball);
     }
 
     void RestartGame()
     {
-        game.balls.clear();
+        for (const auto& ball : balls)
+        {
+            if (ball.hBitmap) DeleteObject(ball.hBitmap);
+        }
+
+        balls.clear();
 
         for (int row = 0; row < blocks.size(); row++)
         {
             for (int col = 0; col < blocks[row].size(); col++)
             {
-                for (int i = 0; i < size(game.blocks[row][col].hBitmaps); i++)
+                for (int i = 0; i < size(blocks[row][col].hBitmaps); i++)
                 {
-                    if (game.blocks[row][col].hBitmaps[i]) DeleteObject(game.blocks[row][col].hBitmaps[i]);
+                    if (blocks[row][col].hBitmaps[i]) DeleteObject(blocks[row][col].hBitmaps[i]);
                 }
             }
         }
 
-        game.blocks.clear();
+        blocks.clear();
 
-        game.bonuses.clear();
+        for (const auto& bonus : bonuses)
+        {
+            if (bonus.hBitmap) DeleteObject(bonus.hBitmap);
+        }
+
+        bonuses.clear();
 
         InitGame();
 
         ProcessSound(L"click.wav");
     }
 
-    void ProcessInput() // процедура обработки ввода
+    void ProcessInput() 
     {
         if (GetAsyncKeyState(VK_LEFT))
         {
@@ -390,31 +418,103 @@ struct Game // структура игры
         }
     }
 
-    void ProcessBlocks(Ball& ball, pair <Point, Point> ball_points)
+    // Check collision between ball and platform
+    void CheckPlatform(Ball& ball, pair<Point, Point> ball_points, pair<Point, Point> platform_points, int& i_contact_point, int current_i)
+    {
+        if (CheckCollision(platform_points, ball_points) && ball.dy > 0)
+        {
+            i_contact_point = current_i;
+            for (int j = i_contact_point + 1; j < size(ball.trace_points); j++)
+            {
+                ball.trace_points[j].y = ball.trace_points[j].y - (copysign(abs(ball.trace_points[j].y - ball.trace_points[i_contact_point].y) * 2, ball.dy));
+            }
+
+            ball.dy *= -1;
+
+            ProcessSound(L"knock.wav");
+        }
+    }
+
+    // Check collision between ball and side walls
+    void CheckWalls(Ball& ball, pair<Point, Point> ball_points, int& i_contact_point, int current_i)
+    {
+        if ((ball_points.first.x <= 0 && ball.dx < 0) || (ball_points.second.x >= window.width && ball.dx > 0))
+        {
+            i_contact_point = current_i;
+            for (int j = i_contact_point + 1; j < size(ball.trace_points); j++)
+            {
+                ball.trace_points[j].x = ball.trace_points[j].x - (copysign(abs(ball.trace_points[j].x - ball.trace_points[i_contact_point].x) * 2, ball.dx));
+            }
+
+            ball.dx *= -1;
+
+            ProcessSound(L"knock.wav");
+        };
+    }
+
+    // Check collision between ball and roof
+    void CheckRoof(Ball& ball, pair<Point, Point> ball_points, int& i_contact_point, int current_i)
+    {
+        if (ball_points.first.y <= 0 && ball.dy < 0)
+        {
+            i_contact_point = current_i;
+            for (int j = i_contact_point + 1; j < size(ball.trace_points); j++)
+            {
+                ball.trace_points[j].y = ball.trace_points[j].y - (copysign(abs(ball.trace_points[j].y - ball.trace_points[i_contact_point].y) * 2, ball.dy));
+            }
+
+            ball.dy *= -1;
+
+            ProcessSound(L"knock.wav");
+        };
+    }
+
+    // Check collision between ball and blocks
+    void CheckBlocks(Ball& ball, pair<Point, Point> ball_points, int& i_contact_point, int current_i)
     {
         bool collision_processed = false;
         for (int row = 0; row < blocks.size(); row++)
         {
             for (int col = 0; col < blocks[row].size(); col++)
             {
-                if (blocks[row][col].endurance <= 0) continue;
+                if (blocks[row][col].endurance <= 0) continue; // Skip destroyed blocks
 
-                pair<Point, Point> block_points = { Point(blocks[row][col].x, blocks[row][col].y), Point(blocks[row][col].x + blocks[row][col].width, blocks[row][col].y + blocks[row][col].height) }; // точки коллизии блока
+                pair<Point, Point> block_points = { Point(blocks[row][col].x, blocks[row][col].y), Point(blocks[row][col].x + blocks[row][col].width, blocks[row][col].y + blocks[row][col].height) }; 
                 if (CheckCollision(block_points, ball_points))
                 {
-                    Point ball_center{ ball.x + ball.width / 2, ball.y + ball.height / 2 }; // центр мяча
-                    Point block_center{ blocks[row][col].x + blocks[row][col].width / 2, blocks[row][col].y + blocks[row][col].height / 2 }; // центр блока
+
+                    Point ball_center{ ball_points.first.x + ball.width / 2, ball_points.first.y + ball.height / 2 };
+                    Point block_center{ blocks[row][col].x + blocks[row][col].width / 2, blocks[row][col].y + blocks[row][col].height / 2 };
 
                     if (abs(ball_center.x - block_center.x) > abs(ball_center.y - block_center.y))
                     {
+                        i_contact_point = current_i;
+                        for (int j = i_contact_point + 1; j < size(ball.trace_points); j++)
+                        {
+                            ball.trace_points[j].x = ball.trace_points[j].x - (copysign(abs(ball.trace_points[j].x - ball.trace_points[i_contact_point].x) * 2, ball.dx));
+                        }
+
                         ball.dx *= -1;
                     }
                     else if (abs(ball_center.x - block_center.x) < abs(ball_center.y - block_center.y))
                     {
+                        i_contact_point = current_i;
+                        for (int j = i_contact_point + 1; j < size(ball.trace_points); j++)
+                        {
+                            ball.trace_points[j].y = ball.trace_points[j].y - (copysign(abs(ball.trace_points[j].y - ball.trace_points[i_contact_point].y) * 2, ball.dy));
+                        }
+
                         ball.dy *= -1;
                     }
                     else
                     {
+                        i_contact_point = current_i;
+                        for (int j = i_contact_point + 1; j < size(ball.trace_points); j++)
+                        {
+                            ball.trace_points[j].x = ball.trace_points[j].x - (copysign(abs(ball.trace_points[j].x - ball.trace_points[i_contact_point].x) * 2, ball.dx));
+                            ball.trace_points[j].y = ball.trace_points[j].y - (copysign(abs(ball.trace_points[j].y - ball.trace_points[i_contact_point].y) * 2, ball.dy));
+                        }
+
                         ball.dx *= -1;
                         ball.dy *= -1;
                     }
@@ -423,22 +523,23 @@ struct Game // структура игры
 
                     ProcessSound(L"knock.wav");
 
-                    if (blocks[row][col].endurance <= 0) // создание бонуса при разрушении блока
+                    if (blocks[row][col].endurance <= 0) // Create bonus after destruction block
                     {
                         if (rand() % 100 < 50) CreateBonus(block_center.x, block_center.y);
 
                         ProcessSound(L"destruction.wav");
                     }
 
-                    collision_processed = true; // фиксация столкновения в текущем кадре
+                    collision_processed = true; 
 
-                    break; // выход из цикла обработки столкновения (по колонкам)
+                    break; 
                 }
             }
 
-            if (collision_processed) break; // если было зафиксировано столкновения в текущем кадре - выход из цикла обработки столкновения (по строкам);
+            if (collision_processed) break;
         }
     }
+
 
     void ProcessBalls(pair<Point, Point> platform_points)
     {
@@ -450,33 +551,29 @@ struct Game // структура игры
             }
             else
             {
-                ball.x -= ball.dx * ball.speed;
-                ball.y -= ball.dy * ball.speed;
+                ball.x = ball.trace_points[size(ball.trace_points)-1].x - ball.width / 2;
+                ball.y = ball.trace_points[size(ball.trace_points)-1].y - ball.height / 2;
 
-                pair<Point, Point> ball_points = { Point(ball.x , ball.y), Point(ball.x + ball.width, ball.y + ball.height) }; // точки коллизии мяча
-
-                if (CheckCollision(platform_points, ball_points) && ball.dy < 0) // отскок мяча от платформы
+                for (int i = 0; i < size(ball.trace_points); i++)
                 {
-                    ball.dy *= -1;
-
-                    ProcessSound(L"knock.wav");
-                }
-
-                if (ball.x <= 0 || ball.x + ball.width >= window.width) // отскок мяча от краев экрана
-                {
-                    ball.dx *= -1;
-
-                    ProcessSound(L"knock.wav");
+                    Point coordinates{ (ball.x + ball.dx * (float(i) / size(ball.trace_points) * ball.speed)) + ball.width / 2, (ball.y + ball.dy * (float(i) / size(ball.trace_points) * ball.speed)) + ball.height / 2 };
+                    ball.trace_points[i] = Point{ coordinates };
                 };
 
-                if (ball.y <= 0) // отскок мяча от потолка
+                int i_contact_point;
+
+                for (int i = 0; i < size(ball.trace_points); i++)
                 {
-                    ball.dy *= -1;
-
-                    ProcessSound(L"knock.wav");
+                    pair<Point, Point> ball_points = { Point(ball.trace_points[i].x - ball.width / 2, ball.trace_points[i].y - ball.height / 2), Point(ball.trace_points[i].x + ball.width / 2, ball.trace_points[i].y + ball.height / 2) };
+                    
+                    CheckPlatform(ball, ball_points, platform_points, i_contact_point, i); // Check collision between ball and platform
+                
+                    CheckWalls(ball, ball_points, i_contact_point, i); // Check collision between ball and side walls
+                
+                    CheckRoof(ball, ball_points, i_contact_point, i); // Check collision between ball and roof
+                    
+                    CheckBlocks(ball, ball_points, i_contact_point, i); // Check collision between ball and blocks
                 };
-
-                ProcessBlocks(ball, ball_points);
             }
         }
     }
@@ -487,7 +584,7 @@ struct Game // структура игры
         {
             bonus.y += bonus.speed;
 
-            pair<Point, Point> bonus_points = { Point(bonus.x, bonus.y), Point(bonus.x + bonus.width, bonus.y + bonus.height) }; // точки коллизии бонуса
+            pair<Point, Point> bonus_points = { Point(bonus.x, bonus.y), Point(bonus.x + bonus.width, bonus.y + bonus.height) };
 
             if (CheckCollision(platform_points, bonus_points))
             {
@@ -585,9 +682,9 @@ struct Game // структура игры
         CheckWinCondition();    
     }
 
-    void ProcessGame() // процедура игрового процесса
+    void ProcessGame() 
     {
-        pair<Point, Point> platform_points = { Point(platform.x, platform.y), Point(platform.x + platform.width, platform.y + platform.height) }; // точки коллизии платформы
+        pair<Point, Point> platform_points = { Point(platform.x, platform.y), Point(platform.x + platform.width, platform.y + platform.height) }; 
 
         ProcessInput();
 
@@ -603,7 +700,7 @@ struct Game // структура игры
     }
 } game;
 
-void DrawBitmap(HDC hdcDest, int x, int y, int w, int h, HBITMAP hBmp, bool transparent) // процедура отрисовки объекта
+void DrawBitmap(HDC hdcDest, int x, int y, int w, int h, HBITMAP hBmp, bool transparent) 
 {
     if (!hBmp) return;
     HDC hMemDC = CreateCompatibleDC(hdcDest);
@@ -613,7 +710,7 @@ void DrawBitmap(HDC hdcDest, int x, int y, int w, int h, HBITMAP hBmp, bool tran
 
     if (transparent)
     {
-        TransparentBlt(hdcDest, x, y, w, h, hMemDC, 0, 0, w, h, RGB(0, 0, 0)); // черные пиксели в прозрачные
+        TransparentBlt(hdcDest, x, y, w, h, hMemDC, 0, 0, w, h, RGB(0, 0, 0)); 
     }
     else
     {
@@ -651,6 +748,11 @@ void ShowBalls(HDC hMemDC)
     for (auto& ball : game.balls)
     {
         DrawBitmap(hMemDC, ball.x, ball.y, ball.width, ball.height, ball.hBitmap, true);
+      
+        //for (int i = 0; i < size(ball.trace_points); i++) // show trace points
+        //{
+        //    SetPixel(hMemDC, ball.trace_points[i].x, ball.trace_points[i].y, RGB(0, 255, 0));
+        //};
     }
 }
 
@@ -671,7 +773,7 @@ void ShowWin(HDC hMemDC)
     DrawBitmap(hMemDC, 0, 0, window.width, window.height, game.hBitmap_win, true);
 }
 
-void ShowObjects(HDC hMemDC) // процедура отрисовки всех объектов игры
+void ShowObjects(HDC hMemDC) 
 {
     switch (game.status)
     {
@@ -725,7 +827,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         break;
     }
 
-    case WM_TIMER: // В функции wWinMain есть строка "SetTimer(window.hWnd, 1, 16, NULL);" - таймер с nIDEvent = 1 (второй аргумент)
+    case WM_TIMER:
     {
         if (wParam == 1)
         {
@@ -735,20 +837,20 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         break;
     }
 
-    case WM_PAINT: // вывод на экран 
+    case WM_PAINT: 
     {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hwnd, &ps);
 
-        // 1. Создаём буфер в памяти
+        // Create memory buffer for double buffering
 
         HDC hMemDC = CreateCompatibleDC(hdc);
         HBITMAP hMemBmp = CreateCompatibleBitmap(hdc, window.width, window.height);
         HBITMAP hOldBmp = (HBITMAP)SelectObject(hMemDC, hMemBmp);
 
-        // 2. Отрисовываем всё в буфер
+        // Draw everything to the memory buffer
 
-        if (window.hBitmap) // задний фон
+        if (window.hBitmap) // Draw background
         {
             HDC hBackDC = CreateCompatibleDC(hMemDC);
             HBITMAP hOldBackBmp = (HBITMAP)SelectObject(hBackDC, window.hBitmap);
@@ -759,12 +861,12 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             DeleteDC(hBackDC);
         }
 
-        ShowObjects(hMemDC); // объекты игры
+        ShowObjects(hMemDC); // Draw all game objects
 
-        // 3. Копирование готового буфера на экран
+        // Copy finished buffer to screen
         BitBlt(hdc, 0, 0, window.width, window.height, hMemDC, 0, 0, SRCCOPY);
 
-        // 4. Очистка
+        // Resource cleaning
         SelectObject(hMemDC, hOldBmp);
         DeleteObject(hMemBmp);
         DeleteDC(hMemDC);
@@ -787,14 +889,15 @@ int WINAPI wWinMain(HINSTANCE hI, HINSTANCE hPrevInstance, PWSTR pCmdLine, int n
 
     RegisterClass(&wc);
 
-    int screenWidth = GetSystemMetrics(SM_CXSCREEN); // получение размеров экрана
-    int screenHeight = GetSystemMetrics(SM_CYSCREEN); // получение размеров экрана
+    // Get screen dimensions for centering
+    int screenWidth = GetSystemMetrics(SM_CXSCREEN); 
+    int screenHeight = GetSystemMetrics(SM_CYSCREEN);
 
-    // Задаем размеры окна
-    int windowWidth = 1024 + 16; // размер окна
-    int windowHeight = 768 + 38; // размер окна
+    // Set window size (including borders (16 and 38 pixels))
+    int windowWidth = 1024 + 16; 
+    int windowHeight = 768 + 38; 
 
-    // вычисление координат для центрирования окна
+    // Calculate center position
     int windowX = (screenWidth - windowWidth) / 2;
     int windowY = (screenHeight - windowHeight) / 2;
 
@@ -803,8 +906,8 @@ int WINAPI wWinMain(HINSTANCE hI, HINSTANCE hPrevInstance, PWSTR pCmdLine, int n
         CLASS_NAME,
         L"Arkanoid",
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
-        windowX, windowY,           // Позиция окна (центр экрана)
-        windowWidth, windowHeight,  // Размеры окна
+        windowX, windowY,           // Window position (center)
+        windowWidth, windowHeight,  // Window size
         NULL,
         NULL,
         hI,
