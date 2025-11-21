@@ -7,7 +7,9 @@
 #include <cmath>
 #include <random>
 #include <ctime>
+#include <mmsystem.h>
 #pragma comment(lib, "msimg32.lib")
+#pragma comment(lib, "winmm.lib")
 using namespace std;
 
 struct Window // структура окна
@@ -51,6 +53,11 @@ enum class GameStatuses // перечисление типов бонусов
 HBITMAP LoadBmp(LPCWSTR bmp_name)
 {
     return (HBITMAP)LoadImageW(NULL, bmp_name, IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+}
+
+void ProcessSound(LPCWSTR wav_name)
+{
+    PlaySound(wav_name, NULL, SND_FILENAME | SND_ASYNC);
 }
 
 struct Game // структура игры
@@ -122,7 +129,7 @@ struct Game // структура игры
         HBITMAP hBitmap = nullptr;
         BonusTypes type;
         float x, y, height, width, speed;
-        bool active;
+        bool active, positive;
 
         Bonus()
         {
@@ -131,11 +138,13 @@ struct Game // структура игры
             if (rand() % 100 < 50) // случайное определение типа создаваемого бонуса
             {
                 BonusTypes positive_bonuses[] = { BonusTypes::add_ball , BonusTypes::size_up }; // позитивные бонусы
+                positive = true;
                 type = positive_bonuses[rand() % size(positive_bonuses)];
             }
             else
             {
                 BonusTypes negative_bonuses[] = { BonusTypes::size_down }; // негативные бонусы
+                positive = false;
                 type = negative_bonuses[rand() % size(negative_bonuses)];
             }
 
@@ -168,13 +177,17 @@ struct Game // структура игры
         {
             if (active)
             {
-                active = false;
+                if (positive) ProcessSound(L"positive_bonus.wav");
+                else ProcessSound(L"negative_bonus.wav");
 
+                active = false;
+                 
                 switch (type)
                 {
                 case BonusTypes::add_ball:
                 {
                     game_link.AddBall();
+                    
                     break;
                 }
                 case BonusTypes::size_up:
@@ -205,6 +218,40 @@ struct Game // структура игры
     {
         hBitmap_defeat = LoadBmp(L"defeat.bmp");
         hBitmap_win = LoadBmp(L"win.bmp");
+    }
+
+    void SetGameStatus(GameStatuses new_status)
+    {
+        if (game.status != new_status)
+        {
+            game.status = new_status;
+
+            switch (new_status)
+            {
+            case GameStatuses::defeat:
+            {
+                ProcessSound(L"defeat.wav");
+                break;
+            }
+            case GameStatuses::win:
+            {
+                ProcessSound(L"win.wav");
+                break;
+            }
+            case GameStatuses::process:
+            {
+                ProcessSound(L"knock.wav");
+                break;
+            }
+            case GameStatuses::wait:
+            {
+                ProcessSound(L"click.wav");
+                break;
+            }
+            default:
+                return;
+            }
+        }
     }
 
     void InitGame() // процедура инициализации игры
@@ -240,7 +287,7 @@ struct Game // структура игры
             blocks.push_back(blocks_row);
         }
 
-        status = GameStatuses::wait;
+        SetGameStatus(GameStatuses::wait);
     }
 
     bool CheckCollision(pair <Point, Point>& points_a, pair <Point, Point>& points_b) // функция проверки столкновения двух коллизий
@@ -312,6 +359,8 @@ struct Game // структура игры
         game.bonuses.clear();
 
         InitGame();
+
+        ProcessSound(L"click.wav");
     }
 
     void ProcessInput() // процедура обработки ввода
@@ -332,7 +381,7 @@ struct Game // структура игры
 
         if (GetAsyncKeyState(VK_SPACE) && status == GameStatuses::wait)
         {
-            status = GameStatuses::process;
+            SetGameStatus(GameStatuses::process);
         }
 
         if (GetAsyncKeyState('R') && (status == GameStatuses::defeat || status == GameStatuses::win))
@@ -372,9 +421,13 @@ struct Game // структура игры
 
                     blocks[row][col].endurance--;
 
+                    ProcessSound(L"knock.wav");
+
                     if (blocks[row][col].endurance <= 0) // создание бонуса при разрушении блока
                     {
                         if (rand() % 100 < 50) CreateBonus(block_center.x, block_center.y);
+
+                        ProcessSound(L"destruction.wav");
                     }
 
                     collision_processed = true; // фиксация столкновения в текущем кадре
@@ -405,16 +458,22 @@ struct Game // структура игры
                 if (CheckCollision(platform_points, ball_points) && ball.dy < 0) // отскок мяча от платформы
                 {
                     ball.dy *= -1;
+
+                    ProcessSound(L"knock.wav");
                 }
 
                 if (ball.x <= 0 || ball.x + ball.width >= window.width) // отскок мяча от краев экрана
                 {
                     ball.dx *= -1;
+
+                    ProcessSound(L"knock.wav");
                 };
 
                 if (ball.y <= 0) // отскок мяча от потолка
                 {
                     ball.dy *= -1;
+
+                    ProcessSound(L"knock.wav");
                 };
 
                 ProcessBlocks(ball, ball_points);
@@ -471,9 +530,9 @@ struct Game // структура игры
     {
         CleanBonuses();
         CleanBalls();
-    }
+    }  
 
-    void ChekDefeatCondition()
+    void CheckDefeatCondition()
     {
         if (game.balls.size() == 0)
         {
@@ -490,16 +549,16 @@ struct Game // структура игры
                     }
                 }
 
-                if (!bonus_found) game.status = GameStatuses::defeat;
+                if (!bonus_found) SetGameStatus(GameStatuses::defeat);
             }
             else
             {
-                game.status = GameStatuses::defeat;
+                SetGameStatus(GameStatuses::defeat);
             }
         }
     }
 
-    void ChekWinCondition()
+    void CheckWinCondition()
     {
         bool block_found = false;
 
@@ -517,13 +576,13 @@ struct Game // структура игры
             if (block_found) break;            
         }
 
-        if (!block_found) game.status = GameStatuses::win;
+        if (!block_found) SetGameStatus(GameStatuses::win);
     }
 
     void UpdateGameStatus()
     {
-        ChekDefeatCondition();
-        ChekWinCondition();
+        CheckDefeatCondition();
+        CheckWinCondition();    
     }
 
     void ProcessGame() // процедура игрового процесса
@@ -532,12 +591,15 @@ struct Game // структура игры
 
         ProcessInput();
 
-        ProcessBalls(platform_points);
-        ProcessBonuses(platform_points);
+        if (game.status != GameStatuses::win && game.status != GameStatuses::defeat)
+        {
+            ProcessBalls(platform_points);
+            ProcessBonuses(platform_points);
 
-        Cleaning();
+            Cleaning();
 
-        UpdateGameStatus();
+            UpdateGameStatus();
+        }
     }
 } game;
 
