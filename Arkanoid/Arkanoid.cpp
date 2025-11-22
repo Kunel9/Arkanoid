@@ -540,6 +540,14 @@ struct Game
         }
     }
 
+    void UpdateBallTracePoints(Ball& ball)
+    {
+        for (int i = 0; i < size(ball.trace_points); i++)
+        {
+            Point coordinates{ (ball.x + ball.dx * (float(i) / size(ball.trace_points) * ball.speed)) + ball.width / 2, (ball.y + ball.dy * (float(i) / size(ball.trace_points) * ball.speed)) + ball.height / 2 };
+            ball.trace_points[i] = Point{ coordinates };
+        };
+    }
 
     void ProcessBalls(pair<Point, Point> platform_points)
     {
@@ -548,17 +556,13 @@ struct Game
             if (status == GameStatuses::wait)
             {
                 ball.x = platform.x + platform.width / 2 - ball.width / 2;
+
+                UpdateBallTracePoints(ball);
             }
             else
             {
-                ball.x = ball.trace_points[size(ball.trace_points)-1].x - ball.width / 2;
-                ball.y = ball.trace_points[size(ball.trace_points)-1].y - ball.height / 2;
 
-                for (int i = 0; i < size(ball.trace_points); i++)
-                {
-                    Point coordinates{ (ball.x + ball.dx * (float(i) / size(ball.trace_points) * ball.speed)) + ball.width / 2, (ball.y + ball.dy * (float(i) / size(ball.trace_points) * ball.speed)) + ball.height / 2 };
-                    ball.trace_points[i] = Point{ coordinates };
-                };
+                UpdateBallTracePoints(ball);
 
                 int i_contact_point;
 
@@ -574,6 +578,9 @@ struct Game
                     
                     CheckBlocks(ball, ball_points, i_contact_point, i); // Check collision between ball and blocks
                 };
+
+                ball.x = ball.trace_points[size(ball.trace_points) - 1].x - ball.width / 2;
+                ball.y = ball.trace_points[size(ball.trace_points) - 1].y - ball.height / 2;
             }
         }
     }
