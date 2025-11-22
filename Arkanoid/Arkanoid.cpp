@@ -67,6 +67,15 @@ void ProcessSound(LPCWSTR wav_name)
     PlaySound(wav_name, NULL, SND_FILENAME | SND_ASYNC);
 }
 
+int last_time = 0;
+float delta_time = 0;
+void UpdateDeltaTime()
+{
+    int current_time = GetTickCount();
+    delta_time = (current_time - last_time) / 25.0;
+    last_time = current_time;
+}
+
 struct Game
 {
     struct Ball
@@ -456,55 +465,38 @@ struct Game
 
     void ProcessInput() 
     {   
-        switch (status)
-        {
-        case GameStatuses::process:
+        if (status == GameStatuses::process) // Gameplay
         {
             if (GetAsyncKeyState(VK_LEFT) || GetAsyncKeyState('A'))
             {
-                platform.x -= platform.speed;
+                platform.x -= platform.speed * delta_time;
 
                 if (platform.x < 0) platform.x = 0;
             }
 
             if (GetAsyncKeyState(VK_RIGHT) || GetAsyncKeyState('D'))
             {
-                platform.x += platform.speed;
+                platform.x += platform.speed * delta_time;
 
                 if (platform.x > window.width - platform.width) platform.x = window.width - platform.width;
             }
-
-            break;
         }
-        case GameStatuses::wait:
+        else if (status == GameStatuses::wait) // Select difficulty before gameplay
         {
+            if (GetAsyncKeyState(VK_SPACE)) SetGameStatus(GameStatuses::process);
+
             if (!difficulty_change_pressed)
             {
-                if (GetAsyncKeyState(VK_LEFT) || GetAsyncKeyState('A'))
-                {
-                    ChangeDifficulty(-1);
-                }
+                if (GetAsyncKeyState(VK_LEFT) || GetAsyncKeyState('A')) ChangeDifficulty(-1);
 
-                if (GetAsyncKeyState(VK_RIGHT) || GetAsyncKeyState('D'))
-                {
-                    ChangeDifficulty(+1);
-                } 
+                if (GetAsyncKeyState(VK_RIGHT) || GetAsyncKeyState('D')) ChangeDifficulty(+1);
             }
             
             difficulty_change_pressed = GetAsyncKeyState(VK_LEFT) || GetAsyncKeyState('A') || GetAsyncKeyState(VK_RIGHT) || GetAsyncKeyState('D');
-
-            break;
         }
-        }
-
-        if (GetAsyncKeyState('R') && (status == GameStatuses::win || status == GameStatuses::defeat))
+        else if (status == GameStatuses::defeat || status == GameStatuses::win) // Restart after win or defeat
         {
-            RestartGame();
-        }
-
-        if (GetAsyncKeyState(VK_SPACE) && (status == GameStatuses::wait))
-        {
-            SetGameStatus(GameStatuses::process);
+            if (GetAsyncKeyState('R')) RestartGame();
         }
     }
 
@@ -634,7 +626,9 @@ struct Game
     {
         for (int i = 0; i < size(ball.trace_points); i++)
         {
-            Point coordinates{ (ball.x + ball.dx * (float(i) / size(ball.trace_points) * ball.speed)) + ball.width / 2, (ball.y + ball.dy * (float(i) / size(ball.trace_points) * ball.speed)) + ball.height / 2 };
+            //Point coordinates{ (ball.x + ball.dx * (float(i) / size(ball.trace_points) * ball.speed)) + ball.width / 2, (ball.y + ball.dy * (float(i) / size(ball.trace_points) * ball.speed)) + ball.height / 2 };
+            float delta_speed = delta_time * ball.speed;
+            Point coordinates{ (ball.x + ball.dx * (float(i) / size(ball.trace_points) * delta_speed)) + ball.width / 2, (ball.y + ball.dy * (float(i) / size(ball.trace_points) * delta_speed)) + ball.height / 2 };
             ball.trace_points[i] = Point{ coordinates };
         };
     }
@@ -679,7 +673,7 @@ struct Game
     {
         for (auto& bonus : bonuses)
         {
-            bonus.y += bonus.speed;
+            bonus.y += bonus.speed * delta_time;
 
             pair<Point, Point> bonus_points = { Point(bonus.x, bonus.y), Point(bonus.x + bonus.width, bonus.y + bonus.height) };
 
@@ -939,6 +933,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         if (wParam == 1)
         {
             InvalidateRect(hwnd, NULL, FALSE);
+            UpdateDeltaTime();
             game.ProcessGame();
         }
         break;
