@@ -130,6 +130,23 @@ struct Game
                 x = x + section_width / 2;
             }
         }
+
+        void SetSize(int value)
+        {
+            int current_center_x = x + width / 2;
+
+            if (value > max_size) size = max_size;
+            else if (value < min_size) size = min_size;
+            else size = value;
+
+            width = section_width * size;
+
+            int new_center_x = x + width / 2;
+
+            x = x + (current_center_x - new_center_x);
+                
+        }
+
     } platform;
 
     struct Bonus
@@ -215,16 +232,27 @@ struct Game
         }
     };
 
+    float gameplay_speed;
+    int difficulty;
+    bool difficulty_change_pressed;
+
+    HBITMAP hBitmaps_difficulty[5] = { nullptr };
     HBITMAP hBitmap_defeat = nullptr;
     HBITMAP hBitmap_win = nullptr;
     vector<Ball> balls; // Vector for balls
     vector<vector<Block>> blocks; // Two-dimensional array for blocks
     vector<Bonus> bonuses; // Vector for bonuses
     GameStatuses status; // Current game status
-    float gameplay_speed = 20;
 
     Game()
     {
+        difficulty_change_pressed = false;
+        difficulty = 1;
+        hBitmaps_difficulty[0] = LoadBmp(L"difficulty_easy.bmp");
+        hBitmaps_difficulty[1] = LoadBmp(L"difficulty_medium.bmp");
+        hBitmaps_difficulty[2] = LoadBmp(L"difficulty_hard.bmp");
+        hBitmaps_difficulty[3] = LoadBmp(L"difficulty_expert.bmp");
+        hBitmaps_difficulty[4] = LoadBmp(L"difficulty_master.bmp");
         hBitmap_defeat = LoadBmp(L"defeat.bmp");
         hBitmap_win = LoadBmp(L"win.bmp");
     }
@@ -249,6 +277,7 @@ struct Game
             }
             case GameStatuses::process:
             {
+                StartGameplayProcess();
                 break;
             }
             case GameStatuses::wait:
@@ -262,23 +291,36 @@ struct Game
         }
     }
 
+    void StartGameplayProcess()
+    {
+        gameplay_speed = 16 + (4 * difficulty);
+        platform.speed = gameplay_speed;
+      
+        for (auto& ball : balls)
+        {
+            ball.speed = gameplay_speed;
+        }
+    }
+
+    void SetPlatformSizeForDifficulty()
+    {
+        platform.SetSize(7 - difficulty);
+    }
+
     void InitGame() 
     {
-        gameplay_speed = 20;
-
-        // Platform initialization
-        platform.size = 5;
+        // Platform initialization        
         platform.min_size = 1;
         platform.max_size = 32;
+        SetPlatformSizeForDifficulty();
         platform.section_width = 32;
         platform.height = 32;
         platform.width = platform.section_width * platform.size;
         platform.x = window.width / 2 - platform.width / 2;
         platform.y = window.height - platform.height;
-        platform.speed = gameplay_speed;
 
         // Start ball initialization
-        AddBall();
+        AddBall(); 
 
         // Create blocks
         for (int row = 1; row < 7; row++)
@@ -345,7 +387,7 @@ struct Game
         new_ball.x = platform.x + platform.width / 2 - new_ball.width / 2;
         new_ball.y = platform.y - new_ball.height;
         new_ball.speed = gameplay_speed;
-        new_ball.dy = (20 + rand() % 60) / 100.;
+        new_ball.dy = (30 + rand() % 20) / 100.;
         new_ball.dx = ((rand() % 2 == 1) ? 1 : -1) * (1 - new_ball.dy);
 
         for (int i = 0; i < size(new_ball.trace_points); i++)
@@ -387,34 +429,82 @@ struct Game
         bonuses.clear();
 
         InitGame();
+    }
 
-        ProcessSound(L"click.wav");
+    void ChangeDifficulty(int value) 
+    {
+        difficulty_change_pressed = true;
+
+        int new_difficulty = difficulty + value;
+
+        if (new_difficulty < 0) {
+            new_difficulty = 0;
+            ProcessSound(L"destruction.wav");
+        }
+        else if (new_difficulty >= size(hBitmaps_difficulty)) 
+        {
+            difficulty = size(hBitmaps_difficulty) - 1;
+            ProcessSound(L"destruction.wav");
+        }
+        else {
+            difficulty = new_difficulty;
+            ProcessSound(L"click.wav");
+        }
+
+        SetPlatformSizeForDifficulty();
     }
 
     void ProcessInput() 
-    {
-        if (GetAsyncKeyState(VK_LEFT))
+    {   
+        switch (status)
         {
-            platform.x -= platform.speed;
+        case GameStatuses::process:
+        {
+            if (GetAsyncKeyState(VK_LEFT) || GetAsyncKeyState('A'))
+            {
+                platform.x -= platform.speed;
 
-            if (platform.x < 0) platform.x = 0;
+                if (platform.x < 0) platform.x = 0;
+            }
+
+            if (GetAsyncKeyState(VK_RIGHT) || GetAsyncKeyState('D'))
+            {
+                platform.x += platform.speed;
+
+                if (platform.x > window.width - platform.width) platform.x = window.width - platform.width;
+            }
+
+            break;
+        }
+        case GameStatuses::wait:
+        {
+            if (!difficulty_change_pressed)
+            {
+                if (GetAsyncKeyState(VK_LEFT) || GetAsyncKeyState('A'))
+                {
+                    ChangeDifficulty(-1);
+                }
+
+                if (GetAsyncKeyState(VK_RIGHT) || GetAsyncKeyState('D'))
+                {
+                    ChangeDifficulty(+1);
+                } 
+            }
+            
+            difficulty_change_pressed = GetAsyncKeyState(VK_LEFT) || GetAsyncKeyState('A') || GetAsyncKeyState(VK_RIGHT) || GetAsyncKeyState('D');
+
+            break;
+        }
         }
 
-        if (GetAsyncKeyState(VK_RIGHT))
-        {
-            platform.x += platform.speed;
-
-            if (platform.x > window.width - platform.width) platform.x = window.width - platform.width;
-        }
-
-        if (GetAsyncKeyState(VK_SPACE) && status == GameStatuses::wait)
-        {
-            SetGameStatus(GameStatuses::process);
-        }
-
-        if (GetAsyncKeyState('R') && (status == GameStatuses::defeat || status == GameStatuses::win))
+        if (GetAsyncKeyState('R') && (status == GameStatuses::win || status == GameStatuses::defeat))
         {
             RestartGame();
+        }
+
+        if (GetAsyncKeyState(VK_SPACE) && (status == GameStatuses::wait))
+        {
+            SetGameStatus(GameStatuses::process);
         }
     }
 
@@ -780,11 +870,21 @@ void ShowWin(HDC hMemDC)
     DrawBitmap(hMemDC, 0, 0, window.width, window.height, game.hBitmap_win, true);
 }
 
+void ShowDifficulty(HDC hMemDC)
+{
+    BITMAP bm;
+    GetObject(game.hBitmaps_difficulty[game.difficulty], (int)sizeof bm, &bm);
+    DrawBitmap(hMemDC, window.width / 2 - bm.bmWidth / 2, window.height - window.height / 4 - bm.bmHeight / 2, bm.bmWidth, bm.bmHeight, game.hBitmaps_difficulty[game.difficulty], true);
+}
+
 void ShowObjects(HDC hMemDC) 
 {
     switch (game.status)
     {
     case GameStatuses::wait:
+    {
+        ShowDifficulty(hMemDC);
+    }
     case GameStatuses::process:
     {
         ShowBlocks(hMemDC);
