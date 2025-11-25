@@ -442,62 +442,77 @@ struct Game
 
     void ChangeDifficulty(int value) 
     {
-        difficulty_change_pressed = true;
-
-        int new_difficulty = difficulty + value;
-
-        if (new_difficulty < 0) {
-            new_difficulty = 0;
-            ProcessSound(L"destruction.wav");
-        }
-        else if (new_difficulty >= size(hBitmaps_difficulty)) 
+        if (!difficulty_change_pressed)
         {
-            difficulty = size(hBitmaps_difficulty) - 1;
-            ProcessSound(L"destruction.wav");
-        }
-        else {
-            difficulty = new_difficulty;
-            ProcessSound(L"click.wav");
-        }
+            difficulty_change_pressed = true;
 
-        SetPlatformSizeForDifficulty();
+            int new_difficulty = difficulty + value;
+
+            if (new_difficulty < 0) {
+                new_difficulty = 0;
+                ProcessSound(L"destruction.wav");
+            }
+            else if (new_difficulty >= size(hBitmaps_difficulty))
+            {
+                difficulty = size(hBitmaps_difficulty) - 1;
+                ProcessSound(L"destruction.wav");
+            }
+            else {
+                difficulty = new_difficulty;
+                ProcessSound(L"click.wav");
+            }
+
+            SetPlatformSizeForDifficulty();
+        }
     }
 
-    void ProcessInput() 
-    {   
-        if (status == GameStatuses::process) // Gameplay
+    void ProcessInput()
+    {
+        if (GetAsyncKeyState(VK_LEFT) || GetAsyncKeyState('A'))
         {
-            if (GetAsyncKeyState(VK_LEFT) || GetAsyncKeyState('A'))
+            switch (status)
+            {
+            case GameStatuses::process:
             {
                 platform.x -= platform.speed * delta_time;
 
                 if (platform.x < 0) platform.x = 0;
-            }
 
-            if (GetAsyncKeyState(VK_RIGHT) || GetAsyncKeyState('D'))
+                break;
+
+            }
+            case GameStatuses::wait:
+            {
+                ChangeDifficulty(-1);
+            }
+            }
+        }
+
+        if (GetAsyncKeyState(VK_RIGHT) || GetAsyncKeyState('D'))
+        {
+            switch (status)
+            {
+            case GameStatuses::process:
             {
                 platform.x += platform.speed * delta_time;
 
                 if (platform.x > window.width - platform.width) platform.x = window.width - platform.width;
-            }
-        }
-        else if (status == GameStatuses::wait) // Select difficulty before gameplay
-        {
-            if (GetAsyncKeyState(VK_SPACE)) SetGameStatus(GameStatuses::process);
 
-            if (!difficulty_change_pressed)
+                break;
+
+            }
+            case GameStatuses::wait:
             {
-                if (GetAsyncKeyState(VK_LEFT) || GetAsyncKeyState('A')) ChangeDifficulty(-1);
-
-                if (GetAsyncKeyState(VK_RIGHT) || GetAsyncKeyState('D')) ChangeDifficulty(+1);
+                ChangeDifficulty(+1);
             }
-            
-            difficulty_change_pressed = GetAsyncKeyState(VK_LEFT) || GetAsyncKeyState('A') || GetAsyncKeyState(VK_RIGHT) || GetAsyncKeyState('D');
+            }
         }
-        else if (status == GameStatuses::defeat || status == GameStatuses::win) // Restart after win or defeat
-        {
-            if (GetAsyncKeyState('R')) RestartGame();
-        }
+
+        difficulty_change_pressed = GetAsyncKeyState(VK_LEFT) || GetAsyncKeyState('A') || GetAsyncKeyState(VK_RIGHT) || GetAsyncKeyState('D');
+
+        if (GetAsyncKeyState(VK_SPACE) && status == GameStatuses::wait) SetGameStatus(GameStatuses::process);
+
+        if (GetAsyncKeyState('R') && (status == GameStatuses::win || status == GameStatuses::defeat)) RestartGame();
     }
 
     // Check collision between ball and platform
